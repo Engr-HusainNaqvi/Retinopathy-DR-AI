@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use this software or its figures, please cite it as below."
+title: "Deep Learning for Diabetic Retinopathy Grading: Ordinal, Explainable and Uncertainty-Aware"
+authors:
+  - family-names: Naqvi
+    given-names: Husain
+version: 1.0.0
+date-released: 2026-11-07
+repository-code: "https://github.com/Engr-HusainNaqvi/Retinopathy-DR-AI"
+url: "https://engr-husainnaqvi.github.io/Retinopathy-DR-AI/"
+keywords:
+  - medical imaging
+  - fundus photography
+  - diabetic retinopathy
+  - ordinal regression
+  - convolutional neural networks
+  - transfer learning
+  - grad-cam
+  - uncertainty quantification
+  - calibration

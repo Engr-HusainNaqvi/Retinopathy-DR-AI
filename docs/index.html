@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Retinopathy DR AI · ordinal, explainable, uncertainty-aware</title>
+<meta name="description" content="Diabetic-retinopathy grading from colour fundus photographs: CNN from scratch vs. ImageNet ResNet-18, softmax cross-entropy vs. CORAL ordinal regression, quadratic weighted kappa, Grad-CAM, integrated gradients, Monte-Carlo-dropout uncertainty, calibration, referral decision curves and paired statistics.">
+<meta property="og:title" content="Deep learning for diabetic retinopathy: ordinal, explainable and uncertainty-aware">
+<meta property="og:image" content="figures/03_ordinal_math.png">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]})"></script>
+<style>
+:root{
+  --bg:#f9f9f7; --surface:#fcfcfb; --card:#ffffff; --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
+  --line:#e1e0d9; --cnn:#1baf7a; --res:#b03fa6; --c1:#2a78d6; --c2:#d1493f; --accent:#2a78d6;
+  --warn-bg:#fdf3e1; --warn-ink:#6b4500;
+  --shadow:0 1px 2px rgba(11,11,11,.06),0 8px 24px rgba(11,11,11,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0d0d0d; --surface:#1a1a19; --card:#1a1a19; --ink:#f0efec; --ink2:#c3c2b7; --muted:#898781;
+    --line:#2c2c2a; --cnn:#199e70; --res:#d55181; --accent:#3987e5; --warn-bg:#2b2416; --warn-ink:#f2c46d; --shadow:none;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0d0d0d; --surface:#1a1a19; --card:#1a1a19; --ink:#f0efec; --ink2:#c3c2b7; --muted:#898781;
+  --line:#2c2c2a; --cnn:#199e70; --res:#d55181; --accent:#3987e5; --warn-bg:#2b2416; --warn-ink:#f2c46d; --shadow:none;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+.wrap{max-width:1080px;margin:0 auto;padding:0 16px}
+nav{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+nav .wrap{display:flex;gap:18px;align-items:center;height:52px;overflow-x:auto;white-space:nowrap;font-size:14px}
+nav b{margin-right:auto;color:var(--ink)}
+nav a{color:var(--ink2)}
+header{padding:56px 0 28px}
+.kicker{color:var(--muted);font-size:13px;letter-spacing:.08em;text-transform:uppercase;font-weight:600}
+h1{font-size:clamp(30px,5vw,48px);line-height:1.12;margin:10px 0 14px;letter-spacing:-.02em}
+h1 .c{color:var(--cnn)} h1 .r{color:var(--res)}
+.lede{font-size:clamp(17px,2.2vw,20px);color:var(--ink2);max-width:800px;margin:0}
+.btns{display:flex;flex-wrap:wrap;gap:10px;margin:24px 0 8px}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;font-weight:600;font-size:15px;border:1px solid var(--line);background:var(--card);color:var(--ink)}
+.btn.primary{background:var(--res);border-color:var(--res);color:#fff}
+.btn:hover{text-decoration:none;transform:translateY(-1px)}
+.author{color:var(--muted);font-size:14px;margin-top:10px}
+.warn{background:var(--warn-bg);color:var(--warn-ink);border-radius:12px;padding:12px 16px;margin:18px 0 0;font-size:15px}
+.hero{margin:26px 0 8px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:var(--surface);box-shadow:var(--shadow)}
+.hero img{display:block;width:100%;height:auto}
+section{padding:40px 0;border-top:1px solid var(--line)}
+h2{font-size:26px;margin:0 0 6px;letter-spacing:-.01em}
+.sub{color:var(--ink2);margin:0 0 22px;max-width:780px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-top:4px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;box-shadow:var(--shadow)}
+.stat .v{font-size:30px;font-weight:700;letter-spacing:-.02em}
+.stat .l{color:var(--ink2);font-size:14px}
+.findings{counter-reset:f;list-style:none;padding:0;margin:0;display:grid;gap:12px}
+.findings li{counter-increment:f;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px 14px 56px;position:relative}
+.findings li::before{content:counter(f);position:absolute;left:16px;top:14px;width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--bg);font-weight:700;font-size:14px;display:grid;place-items:center}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:15px}
+.tbl{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:12px}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:0}
+th{color:var(--ink2);font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.04em}
+.cnn{color:var(--cnn);font-weight:700} .res{color:var(--res);font-weight:700}
+figure{margin:0 0 26px;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+figure img{display:block;width:100%;height:auto;background:#fcfcfb}
+figcaption{padding:12px 16px;color:var(--ink2);font-size:14.5px;border-top:1px solid var(--line)}
+figcaption b{color:var(--ink)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media (max-width:760px){.grid2{grid-template-columns:1fr}}
+.math{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 18px;margin-bottom:16px;overflow-x:auto}
+.math h3{font-size:16px;margin:14px 0 0}
+.katex-display{margin:.8em 0}
+iframe{width:100%;height:600px;border:0;display:block;background:#fcfcfb}
+.frame{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:10px}
+code,pre{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:14px}
+pre{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;overflow-x:auto;line-height:1.5}
+footer{padding:36px 0 60px;color:var(--muted);font-size:14px;border-top:1px solid var(--line)}
+.refs{font-size:14.5px;color:var(--ink2);padding-left:20px}
+.theme{background:none;border:1px solid var(--line);color:var(--ink2);border-radius:8px;padding:4px 10px;cursor:pointer;font:inherit;font-size:13px}
+.g0{color:#e9b949}.g4{color:#47206e}
+.legend-line{display:inline-block;width:22px;border-top:3px solid currentColor;vertical-align:middle;margin-right:6px}
+.legend-line.d{border-top-style:dashed}
+</style>
+</head>
+<body>
+<nav><div class="wrap">
+  <b>Retinopathy DR AI</b>
+  <a href="#results">Results</a><a href="#visuals">Visualisations</a><a href="#math">Math</a>
+  <a href="#interactive">Interactive</a><a href="#limits">Limitations</a><a href="#reproduce">Source code</a>
+  <button class="theme" id="theme" aria-label="Toggle colour theme">◐ theme</button>
+</div></nav>
+
+<div class="wrap">
+<header>
+  <div class="kicker">Medical imaging · ordinal deep learning · trustworthy AI</div>
+  <h1>Diabetic retinopathy grading:<br>does the network know that <span class="r">grade&nbsp;4</span> is worse than <span class="c">grade&nbsp;1</span>?</h1>
+  <p class="lede">1,600 colour fundus photographs, five severity grades. A 2 × 2 experiment crosses a <span class="cnn">CNN trained from scratch</span>
+    with an <span class="res">ImageNet-pre-trained ResNet-18</span>, and a nominal softmax head with a <b>CORAL ordinal head</b> that learns one
+    latent severity axis and four ordered thresholds. Every model is judged by quadratic weighted kappa, by the referral decision a screening
+    programme actually makes, and by whether its saliency, probabilities and uncertainty can be trusted. Paired bootstrap tests are used throughout.</p>
+  <div class="btns">
+    <a class="btn primary" href="https://retinopathy-dr-ai.streamlit.app">▶ Live demo</a>
+    <a class="btn" href="https://github.com/Engr-HusainNaqvi/Retinopathy-DR-AI">⌥ Repository</a>
+  </div>
+  <div class="author">Husain Naqvi · Biomedical Engineer · <a href="https://www.linkedin.com/in/hafizhussain">LinkedIn</a> · <a href="https://github.com/Engr-HusainNaqvi">GitHub</a></div>
+  <div class="warn"><b>Research and education only.</b> This is not a medical device and must not be used to diagnose anyone.</div>
+  <div class="hero"><img src="figures/training_evolution.gif" alt="The latent severity scores of the 400 test images separating into an ordinal ladder over training epochs, with Grad-CAM maps of four eyes" width="1080" height="397"></div>
+</header>
+
+<section id="results">
+  <h2>Results at a glance</h2>
+  <p class="sub">Held-out test set of 400 images (45% referable, i.e. grade ≥ 2). Means ± s.d. over 3 independent training runs; intervals are 95% stratified bootstrap.</p>
+  <div class="stats">
+    <div class="stat"><div class="v"><span class="res">0.760</span></div><div class="l">best mean test QWK (ResNet-18 · CE)</div></div>
+    <div class="stat"><div class="v">0.920</div><div class="l">referable-DR AUC (ResNet-18 · CE)</div></div>
+    <div class="stat"><div class="v">+0.173</div><div class="l">ΔQWK from ImageNet pre-training (ResNet-18 − CNN), 95% CI [+0.103, +0.249]</div></div>
+    <div class="stat"><div class="v">0.74</div><div class="l">AUROC of MC-dropout entropy for flagging a wrong grade</div></div>
+  </div>
+  <div class="tbl" style="margin-top:16px">
+  <table>
+    <thead><tr><th>Model</th><th>QWK</th><th>Accuracy</th><th>Mean |error|</th><th>|error| ≥ 2</th><th>Referable AUC</th><th>Ensemble QWK</th><th>Params</th><th>CPU / run</th></tr></thead>
+    <tbody>
+      <tr><td class="cnn">CNN · CE</td><td>0.582 ± 0.007</td><td>0.533 ± 0.004</td><td>0.730 ± 0.008</td><td>19.8%</td><td>0.827 ± 0.005</td><td>0.582</td><td>0.47 M</td><td>19 min</td></tr>
+      <tr><td class="cnn">CNN · CORAL</td><td>0.609 ± 0.003</td><td>0.548 ± 0.003</td><td>0.657 ± 0.007</td><td>17.6%</td><td>0.833 ± 0.004</td><td>0.617</td><td>0.47 M</td><td>17 min</td></tr>
+      <tr><td class="res">ResNet-18 · CE</td><td>0.760 ± 0.009</td><td>0.630 ± 0.005</td><td>0.500 ± 0.009</td><td>11.2%</td><td>0.920 ± 0.006</td><td>0.778</td><td>11.18 M</td><td>16 min</td></tr>
+      <tr><td class="res">ResNet-18 · CORAL</td><td>0.755 ± 0.003</td><td>0.557 ± 0.004</td><td>0.575 ± 0.007</td><td>11.7%</td><td>0.913 ± 0.003</td><td>0.763</td><td>11.18 M</td><td>16 min</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h3 style="margin-top:28px">What the experiments show</h3>
+  <ol class="findings">
+    <li><b>Pre-training matters more than anything else.</b> ImageNet ResNet-18 beats the CNN trained from scratch by ΔQWK +0.173 (95% CI +0.103 to +0.249) and by ΔAUC +0.083 for referable DR (0.920 vs. 0.827). Both differences are significant in a paired bootstrap (p &lt; 0.001), and McNemar's test agrees (70 vs. 33 discordant eyes, p = 0.0003). With only 1,080 training images, features learned elsewhere are worth more than the architecture.</li>
+    <li><b>The ordinal head helps the weak model and is neutral for the strong one.</b> For the CNN, CORAL raises QWK in all 3 seeds (0.582 → 0.609), cuts mean |error| from 0.73 to 0.66, and more than halves errors of ≥ 3 grades (5.6% → 2.4%). The paired CI (−0.008 to +0.076) still includes zero, so this is a consistent trend, not proof. For ResNet-18, CORAL and CE are tied on QWK (Δ −0.002, CI ±0.04).</li>
+    <li><b>Kappa and accuracy disagree.</b> ResNet-18 · CE is right on 63.0% of eyes against 55.8% for CORAL (McNemar p = 0.01), yet the two have the same QWK. CORAL's extra mistakes are almost all one grade off (32.6% vs. 25.8% of eyes), mostly mild DR called no DR. Quadratic weights charge these little, so kappa does not move. Which model is "better" depends on whether exact grades or distance to the true grade matters.</li>
+    <li><b>Mild DR is nearly invisible at 128 px.</b> Grade 1 is recalled for only 12–32% of eyes by every model. Its defining lesion, the microaneurysm, is smaller than one pixel at this resolution. The CNNs never predict proliferative DR (grade 4, 0% recall); ResNet-18 finds a third of these eyes.</li>
+    <li><b>The referral decision is far easier than exact grading.</b> Grouping the grades into referable (≥ 2) or not gives ResNet-18 · CE an AUC of 0.920 ± 0.006. At Youden's threshold, chosen on validation data, it reaches 92% sensitivity and 74% specificity on test. Decision curves beat "refer everyone" across the clinically relevant range.</li>
+    <li><b>Uncertainty flags mistakes, and calibration needs more data.</b> MC-dropout entropy is 1.80 bits on wrong grades versus 1.06 bits on correct ones (ResNet-18 · CORAL), so it flags errors with AUROC 0.74–0.75 for every model. Temperature scaling lowers ResNet-18 · CE's ECE from 0.093 to 0.067, but raises the CNN's (0.051 → 0.074). The 120-image validation set is too small to fit a temperature reliably.</li>
+  </ol>
+</section>
+
+<section id="visuals">
+  <h2>Visualisations</h2>
+  <p class="sub">Every figure is generated by <code>scripts/make_figures.py</code>. Grades use one ordered colour ramp (light amber → deep plum);
+    configurations are coloured by backbone (<span class="cnn">CNN</span>, <span class="res">ResNet-18</span>) and styled by loss
+    (<span class="legend-line d"></span>cross-entropy, <span class="legend-line"></span>CORAL).</p>
+  <figure><img loading="lazy" src="figures/03_ordinal_math.png" alt="Ordinal mathematics"><figcaption><b>The ordinal model, drawn.</b> The QWK penalty matrix, the four cumulative sigmoids \(P(y>k)=\sigma(g+b_k)\), the class probabilities they imply, and where the 400 test eyes actually fall on the learned severity axis.</figcaption></figure>
+  <figure><img loading="lazy" src="figures/06_error_distance.png" alt="Error distance"><figcaption><b>How far off are the mistakes?</b> The distribution of signed grading errors and the rate of large (≥ 2-grade) errors for every seed.</figcaption></figure>
+  <figure><img loading="lazy" src="figures/09_gradcam_gallery.png" alt="Grad-CAM gallery"><figcaption><b>Grad-CAM of the latent severity score</b>, two test eyes per grade, for both CORAL models.</figcaption></figure>
+  <figure><img loading="lazy" src="figures/10_explanations.png" alt="Three explanation methods"><figcaption><b>Three explanation methods.</b> Grad-CAM is coarse; integrated gradients are pixel-level and satisfy completeness (the box shows \(\sum_i\mathrm{IG}_i\) against \(g(x)-g(x')\)); occlusion measures the change in severity directly. The background-subtracted view shows the lesions a grader looks for.</figcaption></figure>
+  <div class="grid2">
+    <figure><img loading="lazy" src="figures/05_confusion.png" alt="Confusion matrices"><figcaption><b>Confusion matrices</b> with large errors boxed in red.</figcaption></figure>
+    <figure><img loading="lazy" src="figures/07_referable.png" alt="Referable DR"><figcaption><b>The screening decision:</b> referable-DR ROC with bootstrap bands, the operating point, and decision-curve net benefit.</figcaption></figure>
+    <figure><img loading="lazy" src="figures/11_uncertainty.png" alt="Uncertainty"><figcaption><b>Monte-Carlo dropout:</b> entropy against error size, the aleatoric/epistemic split, and QWK when uncertain eyes are deferred.</figcaption></figure>
+    <figure><img loading="lazy" src="figures/08_calibration.png" alt="Calibration"><figcaption><b>Calibration</b> of the confidence in the predicted grade, before and after temperature scaling.</figcaption></figure>
+    <figure><img loading="lazy" src="figures/13_statistics.png" alt="Statistics"><figcaption><b>Is the difference real?</b> Bootstrap QWK distributions, paired ΔQWK with McNemar's test, and which error distances cost the most kappa.</figcaption></figure>
+    <figure><img loading="lazy" src="figures/12_embeddings.png" alt="Embeddings"><figcaption><b>Feature space:</b> t-SNE of the 512-D features, and whether severity is a direction (first principal component vs. grade).</figcaption></figure>
+    <figure><img loading="lazy" src="figures/02_image_statistics.png" alt="Image statistics"><figcaption><b>The images as signals:</b> background subtraction, power spectra by grade and colour statistics.</figcaption></figure>
+    <figure><img loading="lazy" src="figures/14_filters.png" alt="Filters"><figcaption><b>First-layer filters</b> and their frequency response.</figcaption></figure>
+    <figure><img loading="lazy" src="figures/04_training.png" alt="Training"><figcaption><b>Training dynamics</b> for all 12 runs and the one-cycle schedule.</figcaption></figure>
+    <figure><img loading="lazy" src="figures/15_seeds.png" alt="Seeds"><figcaption><b>Seed-to-seed variability</b> and what a 3-seed ensemble adds.</figcaption></figure>
+  </div>
+  <figure><img loading="lazy" src="figures/01_dataset.png" alt="Dataset"><figcaption><b>The data:</b> example fundus photographs per grade and the grade distribution of each split.</figcaption></figure>
+</section>
+
+<section id="math">
+  <h2>The mathematics</h2>
+  <p class="sub">What <code>src/retina</code> implements.</p>
+  <div class="math">
+    <h3>Two output heads</h3>
+    $$\textbf{CE:}\quad p_k=\frac{e^{z_k}}{\sum_je^{z_j}},\qquad\mathcal L_\text{CE}=-\frac1N\sum_i\log p_{y_i}(x_i)$$
+    $$\textbf{CORAL:}\quad P(y>k\mid x)=\sigma\big(g(x)+b_k\big),\quad g(x)=\mathbf w^\top\,\tfrac1{hw}\textstyle\sum_{ij}A_{:,ij},\quad k=0,\dots,3$$
+    $$\mathcal L_\text{CORAL}=-\frac1N\sum_i\sum_{k=0}^{3}\Big[\mathbb 1[y_i>k]\log\sigma(g_i+b_k)+\mathbb 1[y_i\le k]\log\big(1-\sigma(g_i+b_k)\big)\Big]$$
+    $$\hat y=\sum_k\mathbb 1\big[P(y>k\mid x)>\tfrac12\big],\qquad p_k=P(y>k-1)-P(y>k),\qquad b_0\ge b_1\ge b_2\ge b_3\Rightarrow\text{rank consistency}$$
+  </div>
+  <div class="math">
+    <h3>Agreement and the referral decision</h3>
+    $$\kappa_w=1-\frac{\sum_{ij}W_{ij}O_{ij}}{\sum_{ij}W_{ij}E_{ij}},\qquad W_{ij}=\frac{(i-j)^2}{(K-1)^2},\qquad E=\frac{(O\mathbf 1)(\mathbf 1^\top O)}{N}$$
+    $$P(y\ge2\mid x)=\sum_{k\ge2}p_k,\qquad \mathrm{NB}(p_t)=\frac{TP}{N}-\frac{FP}{N}\cdot\frac{p_t}{1-p_t},\qquad J=\text{sens}+\text{spec}-1$$
+  </div>
+  <div class="math">
+    <h3>Explainability</h3>
+    $$\alpha_k=\frac1{hw}\sum_{i,j}\frac{\partial g}{\partial A^k_{ij}},\qquad L_{\text{Grad-CAM}}=\mathrm{ReLU}\Big(\sum_k\alpha_kA^k\Big)$$
+    $$\mathrm{IG}_i(x)=(x_i-x'_i)\int_0^1\frac{\partial g\big(x'+\alpha(x-x')\big)}{\partial x_i}\,d\alpha,\qquad\sum_i\mathrm{IG}_i(x)=g(x)-g(x')$$
+    $$I'=4I-4\,G_\sigma*I+128\quad\text{(background subtraction)},\qquad P(k)=\big\langle|\mathcal F\{x\}(\mathbf k)|^2\big\rangle_{\|\mathbf k\|=k}\propto k^{-\beta}$$
+  </div>
+  <div class="math">
+    <h3>Uncertainty, calibration and statistics</h3>
+    $$\underbrace{H\big[\bar{\mathbf p}\big]}_{\text{total}}=\underbrace{\tfrac1T\textstyle\sum_tH[\mathbf p_t]}_{\text{aleatoric}}+\underbrace{I(y;\boldsymbol\omega\mid x)}_{\text{epistemic}},\qquad \bar{\mathbf p}=\tfrac1T\textstyle\sum_t\mathbf p_t$$
+    $$T^\star=\arg\min_T\,\mathrm{NLL}\big(\mathbf p(z/T)\big),\qquad\mathrm{ECE}=\sum_b\frac{|B_b|}{N}\big|\mathrm{acc}(B_b)-\mathrm{conf}(B_b)\big|$$
+    $$\widehat\Delta^{*b}=\kappa_w^{A}(\mathcal D^{*b})-\kappa_w^{B}(\mathcal D^{*b}),\qquad b\sim\mathrm{Binomial}\big(b+c,\tfrac12\big)\ \text{under }H_0\ \text{(McNemar)}$$
+  </div>
+</section>
+
+<section id="interactive">
+  <h2>Interactive</h2>
+  <p class="sub">To upload your own fundus photograph and see the grade, Grad-CAM and uncertainty live, open the <a href="https://retinopathy-dr-ai.streamlit.app">Streamlit demo</a>.</p>
+  <div class="frame"><iframe loading="lazy" src="interactive/ordinal_ladder.html" title="Ordinal ladder" style="height:540px"></iframe></div>
+  <p class="sub">Every test eye on the learned severity axis \(g(x)\); the dashed lines are the thresholds \(-b_k\). Hover for the predicted grade.</p>
+  <div class="frame"><iframe loading="lazy" src="interactive/referral_explorer.html" title="Referral threshold explorer"></iframe></div>
+  <p class="sub">Drag the slider: the referral operating point of all four models moves along their ROC curves; hover for how many eyes are referred or missed.</p>
+  <div class="frame"><iframe loading="lazy" src="interactive/gradcam_browser.html" title="Grad-CAM browser" style="height:660px"></iframe></div>
+  <p class="sub">Browse ResNet-18 · CORAL Grad-CAM maps, four test eyes per grade, with the full grade distribution.</p>
+  <div class="frame"><iframe loading="lazy" src="interactive/embedding_3d.html" title="3-D embedding"></iframe></div>
+  <p class="sub">The 512-D ResNet-18 · CORAL features of all test eyes on three principal components (drag to rotate).</p>
+</section>
+
+<section id="limits">
+  <h2>Limitations</h2>
+  <ul class="refs" style="font-size:15.5px">
+    <li>RetinaMNIST is small (1,080 training images) and comes from a single challenge source (DeepDRiD); results will not transfer to other cameras, populations or image-quality distributions without validation.</li>
+    <li>At 128 × 128 px, microaneurysms, the earliest sign of DR, are often smaller than one pixel. This is why grade 1 is nearly invisible to every model, and why published RetinaMNIST results are far below full-resolution DR systems.</li>
+    <li>The validation set has only 120 images: it is too small to choose epochs, and temperatures fitted on it are noisy.</li>
+    <li>Grades carry label noise: graders disagree, especially between adjacent grades, which caps the attainable kappa.</li>
+    <li>Saliency maps show what the model used, not what is clinically correct. MC dropout is an approximation to Bayesian uncertainty.</li>
+  </ul>
+</section>
+
+<section id="reproduce">
+  <h2>Source code</h2>
+  <p>The full implementation, notebook and trained weights are kept in a private repository. Access is available on request to professors, reviewers and collaborators via <a href="https://www.linkedin.com/in/hafizhussain">LinkedIn</a> or <a href="https://github.com/Engr-HusainNaqvi">GitHub</a>.</p>
+  <p><b>© 2026 Husain Naqvi. All rights reserved.</b> No part of this work may be copied or reused without written permission.</p>
+  <h3>References</h3>
+  <ol class="refs">
+    <li>Cao, Mirjalili &amp; Raschka (2020). Rank consistent ordinal regression for neural networks with application to age estimation. <i>Pattern Recognition Letters</i> 140.</li>
+    <li>Yang et al. (2023). MedMNIST v2: a large-scale lightweight benchmark for 2D and 3D biomedical image classification. <i>Scientific Data</i> 10.</li>
+    <li>Liu et al. (2022). DeepDRiD: diabetic retinopathy grading and image quality estimation challenge. <i>Patterns</i> 3(6).</li>
+    <li>Gulshan et al. (2016). Development and validation of a deep learning algorithm for detection of diabetic retinopathy in retinal fundus photographs. <i>JAMA</i> 316(22).</li>
+    <li>Cohen (1968). Weighted kappa: nominal scale agreement with provision for scaled disagreement or partial credit. <i>Psychological Bulletin</i> 70(4).</li>
+    <li>Wilkinson et al. (2003). Proposed international clinical diabetic retinopathy and diabetic macular edema disease severity scales. <i>Ophthalmology</i> 110(9).</li>
+    <li>He et al. (2016). Deep residual learning for image recognition. <i>CVPR</i>.</li>
+    <li>Selvaraju et al. (2017). Grad-CAM. <i>ICCV</i>. · Sundararajan, Taly &amp; Yan (2017). Axiomatic attribution for deep networks. <i>ICML</i>.</li>
+    <li>Gal &amp; Ghahramani (2016). Dropout as a Bayesian approximation. <i>ICML</i>. · Guo et al. (2017). On calibration of modern neural networks. <i>ICML</i>.</li>
+    <li>Vickers &amp; Elkin (2006). Decision curve analysis. <i>Medical Decision Making</i> 26(6).</li>
+  </ol>
+</section>
+</div>
+<footer><div class="wrap">© 2026 Husain Naqvi · All rights reserved · Data: RetinaMNIST (CC BY 4.0), derived from the DeepDRiD challenge · Built with PyTorch, Matplotlib, Plotly and Streamlit.</div></footer>
+<script>
+(function(){
+  var root=document.documentElement,b=document.getElementById('theme'),k='retina-theme';
+  try{var s=localStorage.getItem(k); if(s) root.setAttribute('data-theme',s);}catch(e){}
+  b.addEventListener('click',function(){
+    var dark=root.getAttribute('data-theme')==='dark'||(!root.getAttribute('data-theme')&&matchMedia('(prefers-color-scheme: dark)').matches);
+    var n=dark?'light':'dark'; root.setAttribute('data-theme',n);
+    try{localStorage.setItem(k,n);}catch(e){}
+  });
+})();
+</script>
+</body>
+</html>

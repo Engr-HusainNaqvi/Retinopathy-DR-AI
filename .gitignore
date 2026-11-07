@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+data/
+results/cache.pkl
+*.log
+.ipynb_checkpoints/
+results/runs.pkl
